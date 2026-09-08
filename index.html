@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}入力 - 勤怠管理{% endblock %}
+{% block content %}
+<h1>日次入力</h1>
+<form id="go-entry" class="card form-inline" onsubmit="return false;">
+  <label>社員
+    <select id="employee_id">
+      {% for e in employees %}
+      <option value="{{ e.id }}">{{ e.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>対象月
+    <input type="month" id="ym" value="{{ '%04d-%02d' % (today.year, today.month) }}">
+  </label>
+  <button type="button" onclick="goEntry()">入力画面へ</button>
+</form>
+
+<h2>社員一覧</h2>
+<div class="card-grid">
+  {% for e in employees %}
+  <a class="card employee-card" href="{{ url_for('entry', employee_id=e.id, year=today.year, month=today.month) }}">
+    {{ e.name }}
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function goEntry() {
+  const empId = document.getElementById('employee_id').value;
+  const ym = document.getElementById('ym').value; // YYYY-MM
+  if (!ym) return;
+  const [y, m] = ym.split('-');
+  window.location.href = `/entry/${empId}/${parseInt(y)}/${parseInt(m)}`;
+}
+</script>
+{% endblock %}
