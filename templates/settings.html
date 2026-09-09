@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}設定 - 勤怠管理{% endblock %}
+{% block content %}
+<h1>設定</h1>
+
+<section class="card">
+  <h2>基本設定</h2>
+  <form method="post" action="{{ url_for('settings_general') }}" class="form-inline">
+    <label>締め日
+      <input type="number" name="closing_day" min="1" max="31" value="{{ closing_day }}" style="width:5em">日
+    </label>
+    <label>基準労働時間(1日)
+      <input type="number" name="standard_daily_hours" min="1" step="0.5" value="{{ standard_hours }}" style="width:5em">時間
+    </label>
+    <button type="submit">保存</button>
+  </form>
+  <p class="hint">遅刻・早退・早出残業・有休・欠勤・休出は「締め日の翌日〜翌月の締め日」で集計され、翌月度として扱われます。</p>
+</section>
+
+<section class="card">
+  <h2>休日カレンダー</h2>
+  <form method="post" action="{{ url_for('settings_holidays_add') }}" class="form-inline">
+    <label>日付 <input type="date" name="date" required></label>
+    <label>名称 <input type="text" name="name" placeholder="例: 元日"></label>
+    <button type="submit">1日追加</button>
+  </form>
+  <form method="post" action="{{ url_for('settings_holidays_add_range') }}" class="form-inline">
+    <label>開始日 <input type="date" name="start_date" required></label>
+    <label>終了日 <input type="date" name="end_date" required></label>
+    <label>名称 <input type="text" name="range_name" placeholder="例: お盆休み"></label>
+    <button type="submit">範囲で一括追加</button>
+  </form>
+
+  <table class="settings-table">
+    <thead><tr><th>日付</th><th>名称</th><th></th></tr></thead>
+    <tbody>
+      {% for h in holidays %}
+      <tr>
+        <td>{{ h.date }}</td>
+        <td>{{ h.name }}</td>
+        <td>
+          <form method="post" action="{{ url_for('settings_holidays_delete', holiday_id=h.id) }}" onsubmit="return confirm('削除しますか?');">
+            <button type="submit" class="btn-danger">削除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">登録されている休日はありません</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>社員一覧</h2>
+  <form method="post" action="{{ url_for('settings_employees_add') }}" class="form-inline">
+    <label>氏名 <input type="text" name="name" required></label>
+    <button type="submit">追加</button>
+  </form>
+
+  <table class="settings-table">
+    <thead><tr><th>氏名</th><th>状態</th><th></th></tr></thead>
+    <tbody>
+      {% for e in employees %}
+      <tr>
+        <td>{{ e.name }}</td>
+        <td>{{ '有効' if e.active else '無効' }}</td>
+        <td>
+          <form method="post" action="{{ url_for('settings_employees_toggle', employee_id=e.id) }}">
+            <button type="submit">{{ '無効化' if e.active else '有効化' }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

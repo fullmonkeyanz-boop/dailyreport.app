@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}集計 - 勤怠管理{% endblock %}
+{% block content %}
+<h1>月次集計</h1>
+
+<form class="card form-inline" method="get" action="{{ url_for('summary') }}">
+  <label>社員
+    <select name="employee_id">
+      <option value="all" {{ 'selected' if employee_id == 'all' else '' }}>全員</option>
+      {% for e in employees %}
+      <option value="{{ e.id }}" {{ 'selected' if employee_id|string == e.id|string else '' }}>{{ e.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>締め月
+    <input type="month" name="ym_hidden" style="display:none">
+    <select name="month" id="month-select">
+      {% for m in range(1, 13) %}
+      <option value="{{ m }}" {{ 'selected' if m == month else '' }}>{{ m }}月</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>年
+    <input type="number" name="year" value="{{ year }}" style="width:6em">
+  </label>
+  <button type="submit">表示</button>
+</form>
+
+<div class="toolbar">
+  <a class="btn" href="{{ url_for('summary', employee_id=employee_id, year=prev_year, month=prev_month) }}">← 前月度</a>
+  <a class="btn" href="{{ url_for('summary', employee_id=employee_id, year=next_year, month=next_month) }}">翌月度 →</a>
+</div>
+
+{% if results %}
+<p class="note-box">
+  遅刻・早退・早出残業・休出・有休・欠勤・時間計は「{{ results[0].reporting.period_start }} 〜 {{ results[0].reporting.period_end }}」
+  (締め日{{ closing_day }}日基準)の集計です。現場往復(時間外移動)は{{ year }}年{{ month }}月の暦月集計(繰り越しなし)です。
+</p>
+
+<div class="table-wrap">
+<table class="summary-table">
+  <thead>
+    <tr>
+      <th>社員</th>
+      <th>有休(h)</th>
+      <th>遅刻(h)</th>
+      <th>早退(h)</th>
+      <th>欠勤(h)</th>
+      <th>早出/残業(h)</th>
+      <th>休出(h)</th>
+      <th>時間計(h)</th>
+      <th>現場往復(h)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+    <tr>
+      <td><a href="{{ url_for('entry', employee_id=r.employee.id, year=year, month=month) }}">{{ r.employee.name }}</a></td>
+      <td>{{ r.reporting.paid_leave_hours }}</td>
+      <td>{{ r.reporting.late_hours }}</td>
+      <td>{{ r.reporting.early_leave_hours }}</td>
+      <td>{{ r.reporting.absence_hours }}</td>
+      <td>{{ r.reporting.overtime_hours }}</td>
+      <td>{{ r.reporting.holiday_work_hours }}</td>
+      <td>{{ r.reporting.total_hours }}</td>
+      <td>{{ r.travel_hours }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>データがありません。</p>
+{% endif %}
+{% endblock %}

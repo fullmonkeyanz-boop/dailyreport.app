@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.name }} {{ year }}年{{ month }}月 - 勤怠管理{% endblock %}
+{% block content %}
+<h1>{{ employee.name }} — {{ year }}年{{ month }}月</h1>
+
+<div class="toolbar">
+  <a class="btn" href="{{ url_for('entry', employee_id=employee.id, year=prev_year, month=prev_month) }}">← 前月</a>
+  <a class="btn" href="{{ url_for('entry', employee_id=employee.id, year=next_year, month=next_month) }}">翌月 →</a>
+  <a class="btn" href="{{ url_for('index') }}">社員・月を選び直す</a>
+  <a class="btn" href="{{ url_for('summary', employee_id=employee.id, year=year, month=month) }}">この社員の集計を見る</a>
+  <span id="save-indicator" class="save-indicator"></span>
+</div>
+
+<p class="note-box">
+  締め日は毎月<strong>{{ closing_day }}日</strong>です。<strong>1〜{{ closing_day }}日</strong>の実績は<strong>{{ year }}年{{ month }}月度</strong>、
+  <strong>{{ closing_day + 1 }}日〜月末</strong>の実績は<strong>翌月度</strong>として、遅刻・早退・早出残業・有休・欠勤・休出が集計されます
+  (表内の赤線がその境目です)。現場往復(時間外移動)はこの締めに関係なく、暦月(1日〜末日)で集計され繰り越しません。
+</p>
+
+<div class="table-wrap">
+<table class="entry-table" id="entry-table" data-standard-hours="{{ standard_hours }}">
+  <thead>
+    <tr>
+      <th>日</th>
+      <th>曜</th>
+      <th>有休</th>
+      <th>遅刻</th>
+      <th>早退</th>
+      <th>欠勤</th>
+      <th>早出/残業</th>
+      <th>休出</th>
+      <th>時間計</th>
+      <th>現場往復(時間)</th>
+      <th>製番・他作業内容</th>
+      <th>備考</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="{{ 'holiday' if r.is_holiday else '' }} {{ 'weekend' if r.is_weekend else '' }} {{ 'closing-day' if r.is_closing_day else '' }}"
+        data-date="{{ r.iso }}">
+      <td class="day-cell">{{ r.day }}</td>
+      <td class="weekday-cell">{{ r.weekday }}</td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="paid_leave_hours" value="{{ r.paid_leave_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="late_hours" value="{{ r.late_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="early_leave_hours" value="{{ r.early_leave_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="absence_hours" value="{{ r.absence_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="overtime_hours" value="{{ r.overtime_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="holiday_work_hours" value="{{ r.holiday_work_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell total-cell" data-field="total_hours" value="{{ r.total_hours }}"></td>
+      <td><input type="number" step="0.5" min="0" class="cell" data-field="travel_hours" value="{{ r.travel_hours }}"></td>
+      <td><input type="text" class="cell wide" data-field="job_content" value="{{ r.job_content }}"></td>
+      <td><input type="text" class="cell wide" data-field="note" value="{{ r.note }}"></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initEntryTable('{{ url_for("api_record") }}', {{ employee.id }});
+</script>
+{% endblock %}
