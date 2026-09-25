@@ -372,6 +372,29 @@ var FIREBASE_CONFIG = {
 (function(){
 "use strict";
 
+/* ---- デバッグ用: 予期しないJSエラーが出たら画面上部に赤いバナーで表示する。
+   携帯だけで弁当ボタンが反応しない不具合の原因調査用。原因が分かったら削除してよい。 ---- */
+(function(){
+  var shown = 0;
+  function showErrBanner(text){
+    shown++;
+    if (shown > 5) return; // 大量発生時に画面を埋め尽くさない
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;'+
+      'font-size:11px;line-height:1.4;padding:8px 10px;white-space:pre-wrap;word-break:break-all;'+
+      'top:' + ((shown-1)*46) + 'px;';
+    box.textContent = 'JSエラー: ' + text;
+    document.body.appendChild(box);
+  }
+  window.addEventListener('error', function(e){
+    showErrBanner((e.message||String(e)) + ' (' + (e.filename||'') + ':' + (e.lineno||'') + ')');
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    var r = e.reason;
+    showErrBanner('Promise: ' + (r && r.message ? r.message : String(r)));
+  });
+})();
+
 /* ================= constants ================= */
 var DOW_LABELS = ['日','月','火','水','木','金','土'];
 var SALT = 'seiban-nippou-v1::';
@@ -819,7 +842,7 @@ function renderGate(){
   if (!state.accessDoc){
     return (
       '<div class="app-shell">' +
-        '<div class="view" style="padding-top:16px"><div class="bento-link-wrap" style="margin-bottom:0"><a class="bento-link-big" href="bento_index.html">🍱 弁当注文はこちら</a></div></div>' +
+        '<div class="view" style="padding-top:16px"><div class="bento-link-wrap" style="margin-bottom:0"><a class="bento-link-big" href="bento_index.html" onclick="try{location.href=&quot;bento_index.html&quot;;}catch(e){}return false;">🍱 弁当注文はこちら</a></div></div>' +
         '<div class="view" style="padding-top:8px"><div class="panel gate-wrap">' +
           '<div class="icon">🔑</div>' +
           '<h2>アクセスコードの初期設定</h2>' +
@@ -833,7 +856,7 @@ function renderGate(){
   }
   return (
     '<div class="app-shell">' +
-      '<div class="view" style="padding-top:16px"><div class="bento-link-wrap" style="margin-bottom:0"><a class="bento-link-big" href="bento_index.html">🍱 弁当注文はこちら</a></div></div>' +
+      '<div class="view" style="padding-top:16px"><div class="bento-link-wrap" style="margin-bottom:0"><a class="bento-link-big" href="bento_index.html" onclick="try{location.href=&quot;bento_index.html&quot;;}catch(e){}return false;">🍱 弁当注文はこちら</a></div></div>' +
       '<div class="view" style="padding-top:8px"><div class="panel gate-wrap">' +
         '<div class="icon">🔑</div>' +
         '<h2>日報</h2>' +
@@ -903,7 +926,7 @@ function renderTopbar(){
         '<div class="brand"><span class="mark">日報</span><span class="sub">勤務時間管理</span></div>' +
         whoHtml +
       '</div>' +
-      '<div class="bento-link-wrap"><a class="bento-link-big" href="bento_index.html">🍱 弁当注文はこちら</a></div>' +
+      '<div class="bento-link-wrap"><a class="bento-link-big" href="bento_index.html" onclick="try{location.href=&quot;bento_index.html&quot;;}catch(e){}return false;">🍱 弁当注文はこちら</a></div>' +
       '<div class="tabs" role="tablist">' + tabsHtml + '</div>' +
     '</div>'
   );
