@@ -872,6 +872,21 @@ function bindGate(){
       }
     });
   });
+  bindBentoLinks();
+}
+
+// 「🍱 弁当注文はこちら」ボタン。通常のaタグのhref遷移に加えて、
+// 携帯のブラウザ(特に一部のアプリ内ブラウザ等)でタップしても遷移しない
+// 事例があったため、クリックイベントでも明示的に同じタブ内で遷移させる。
+function bindBentoLinks(){
+  document.querySelectorAll('.bento-link-big').forEach(function(el){
+    if (el._bentoLinkBound) return;
+    el._bentoLinkBound = true;
+    el.addEventListener('click', function(e){
+      e.preventDefault();
+      window.location.href = el.getAttribute('href');
+    });
+  });
 }
 
 function renderTopbar(){
@@ -912,6 +927,7 @@ function bindTopbar(){
     if (state.monthDocUnsub){ state.monthDocUnsub(); state.monthDocUnsub=null; }
     render();
   });
+  bindBentoLinks();
 }
 
 function escapeHtml(s){
