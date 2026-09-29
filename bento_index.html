@@ -1,0 +1,1256 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>弁当注文</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+/* ============ tokens (日報アプリと共通のデザイントークン) ============ */
+:root{
+  --bg:#eceff2;
+  --surface:#ffffff;
+  --surface-2:#f4f6f8;
+  --border:#d9dee4;
+  --border-strong:#b9c2cc;
+  --text:#151d26;
+  --text-muted:#5c6773;
+  --text-faint:#8b95a1;
+  --accent:#1f5c6b;
+  --accent-strong:#153f4a;
+  --accent-soft:#dbeaed;
+  --accent-soft-strong:#c3dee2;
+  --amber:#9c6412;
+  --amber-soft:#f3e6cd;
+  --red:#a63a3a;
+  --red-soft:#f5dede;
+  --green:#2f7a55;
+  --green-soft:#dcefe3;
+  --shadow:0 1px 2px rgba(15,23,32,.07),0 8px 20px rgba(15,23,32,.06);
+  --radius-s:6px;
+  --radius-m:12px;
+  --font-display:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;
+  --font-body:'Noto Sans JP','Zen Kaku Gothic New',sans-serif;
+  --font-mono:'Roboto Mono',ui-monospace,'SFMono-Regular',monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#11161c;
+    --surface:#1a222a;
+    --surface-2:#212a33;
+    --border:#2d3944;
+    --border-strong:#3d4b58;
+    --text:#e8edf1;
+    --text-muted:#a3afbb;
+    --text-faint:#707c88;
+    --accent:#6cb3c0;
+    --accent-strong:#8fc9d4;
+    --accent-soft:#1e3a40;
+    --accent-soft-strong:#254852;
+    --amber:#d6a355;
+    --amber-soft:#3a2f1a;
+    --red:#e08a8a;
+    --red-soft:#3a2424;
+    --green:#7ec49b;
+    --green-soft:#1f3327;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+h1,h2,h3{font-family:var(--font-display);font-weight:700;margin:0}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+
+/* ============ shell ============ */
+.app-shell{max-width:720px;margin:0 auto;padding:0 0 96px;min-height:100vh}
+.topbar{
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:14px 16px 0;
+}
+.topbar-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-bottom:12px;flex-wrap:wrap;row-gap:4px}
+.brand{display:flex;align-items:baseline;gap:8px}
+.brand .mark{font-family:var(--font-display);font-weight:900;font-size:19px;letter-spacing:.02em;color:var(--accent-strong)}
+.brand .sub{font-size:11.5px;color:var(--text-faint);letter-spacing:.02em}
+
+.tabs{display:flex;gap:2px;padding:0}
+.tab{
+  flex:1;text-align:center;padding:10px 6px;border:none;background:none;
+  color:var(--text-muted);font-weight:500;font-size:13.5px;
+  border-bottom:2.5px solid transparent;min-height:44px;
+}
+.tab[aria-selected="true"]{color:var(--accent-strong);border-bottom-color:var(--accent);font-weight:700}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+.view{padding:18px 16px 0}
+.stack{display:flex;flex-direction:column;gap:14px}
+
+/* ============ primitives ============ */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:16px;box-shadow:var(--shadow)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.panel-head h2{font-size:15.5px}
+.eyebrow{font-size:11px;letter-spacing:.06em;color:var(--text-faint);font-weight:700;text-transform:uppercase}
+.caption{font-size:12px;color:var(--text-muted);line-height:1.6}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 16px;border-radius:var(--radius-s);border:1px solid var(--border-strong);
+  background:var(--surface);color:var(--text);font-weight:600;font-size:13.5px;min-height:40px;
+}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-strong)}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--accent-strong)}
+.btn-danger{border-color:var(--red);color:var(--red);background:transparent}
+.btn-sm{padding:6px 10px;min-height:32px;font-size:12.5px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;color:var(--text-muted);font-weight:600}
+.field input[type="text"],.field input[type="password"],.field input[type="number"],.field input[type="time"],.field select,.field textarea{
+  border:1px solid var(--border-strong);border-radius:var(--radius-s);background:var(--surface-2);
+  padding:9px 10px;min-height:40px;color:var(--text);width:100%;
+}
+.field input:focus-visible,.field select:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+.field-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.num-input{font-family:var(--font-mono);text-align:right}
+
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700}
+.chip-red{background:var(--red-soft);color:var(--red)}
+.chip-green{background:var(--green-soft);color:var(--green)}
+.chip-accent{background:var(--accent-soft);color:var(--accent-strong)}
+
+.divider{height:1px;background:var(--border);border:none;margin:2px 0}
+
+.toast-wrap{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:60;pointer-events:none}
+.toast{background:var(--accent-strong);color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:var(--shadow);opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.error{background:var(--red)}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(10,14,18,.5);display:flex;align-items:flex-end;justify-content:center;z-index:70}
+@media (min-width:560px){.modal-overlay{align-items:center}}
+.modal{background:var(--surface);border-radius:16px 16px 0 0;padding:20px;max-width:420px;width:100%;box-shadow:var(--shadow)}
+@media (min-width:560px){.modal{border-radius:var(--radius-m)}}
+
+.gate-wrap{display:flex;flex-direction:column;align-items:center;text-align:center;padding:36px 16px;gap:14px}
+.gate-wrap .icon{font-size:30px}
+
+footer.app-footer{padding:22px 16px 0;text-align:center}
+footer.app-footer p{font-size:11px;color:var(--text-faint)}
+
+/* ============ month nav / day grid ============ */
+.month-nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.month-nav .label{font-family:var(--font-display);font-weight:700;font-size:16px}
+.icon-btn{width:36px;height:36px;border-radius:99px;border:1px solid var(--border-strong);background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+
+.day-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+.dow{text-align:center;font-size:10.5px;color:var(--text-faint);font-weight:700;padding-bottom:2px}
+.day-cell{position:relative;aspect-ratio:1/1;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:44px}
+.day-cell .dnum{font-size:12.5px;font-weight:600;color:var(--text)}
+.day-cell .dhour{font-family:var(--font-mono);font-size:9.5px;color:var(--accent-strong);font-weight:700}
+.day-cell.off{background:transparent;border-color:transparent}
+.day-cell.holiday{background:var(--red-soft)}
+.day-cell.holiday .dnum{color:var(--red)}
+.day-cell.today{box-shadow:0 0 0 2px var(--accent) inset}
+.day-cell.selected{background:var(--accent);border-color:var(--accent)}
+.day-cell.selected .dnum,.day-cell.selected .dhour{color:#fff}
+.day-cell.has-entry:not(.selected){border-color:var(--accent-soft-strong)}
+
+.day-form-title{font-family:var(--font-display);font-weight:700;font-size:15.5px;display:flex;align-items:center;gap:8px}
+.total-badge{margin-left:auto;font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--accent-strong);background:var(--accent-soft);padding:4px 10px;border-radius:var(--radius-s)}
+
+/* ============ ledger table (注文一覧) ============ */
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-s)}
+table.ledger{border-collapse:collapse;width:100%;min-width:560px;font-size:12.5px}
+table.ledger th,table.ledger td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
+table.ledger th:first-child,table.ledger td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);font-weight:600}
+table.ledger thead th{background:var(--surface-2);color:var(--text-muted);font-weight:700;font-size:11px;letter-spacing:.02em}
+table.ledger tbody tr:last-child td{border-bottom:none}
+table.ledger td{font-family:var(--font-mono)}
+table.ledger td:first-child{font-family:var(--font-body)}
+table.ledger tfoot td{font-weight:700;background:var(--surface-2);border-top:1.5px solid var(--border-strong)}
+
+table.ledger td.order-td{padding:3px!important}
+table.ledger.bento-table{min-width:0;width:auto;table-layout:auto}
+table.ledger.bento-table th,table.ledger.bento-table td{padding:2px 1px;text-align:center}
+table.ledger.bento-table th:first-child,table.ledger.bento-table td:first-child{text-align:left;padding-left:4px;white-space:nowrap}
+table.ledger.bento-table th.bento-name-th{writing-mode:vertical-rl;white-space:nowrap;font-size:10.5px;font-weight:700;padding:5px 0 3px;vertical-align:bottom}
+.order-table-wrap{max-height:58vh;overflow-y:auto}
+table.ledger.bento-table thead th{position:sticky;top:0;z-index:5;box-shadow:0 1px 0 var(--border)}
+.order-cell{width:100%;min-width:20px;min-height:26px;padding:0;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface-2);color:var(--text);font-family:var(--font-mono);font-weight:700;font-size:11px;touch-action:none;-webkit-user-select:none;user-select:none}
+table.ledger.bento-table td.bento-yen-cell{font-size:8px;letter-spacing:-.02em;white-space:nowrap;padding-left:1px;padding-right:1px;border-right:1px solid var(--border)}
+table.ledger.bento-table td.bento-yen-cell:last-child{border-right:none}
+.order-cell.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.order-cell.locked{opacity:.4;pointer-events:none}
+tr.bento-row-holiday td{background:var(--red-soft)}
+
+/* ============ master list rows ============ */
+.list-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.list-row:last-child{border-bottom:none}
+.list-row .name{font-weight:600;flex:1}
+.switch{position:relative;width:38px;height:22px;border-radius:99px;background:var(--border-strong);border:none;flex-shrink:0}
+.switch[aria-checked="true"]{background:var(--accent)}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:99px;background:#fff;transition:transform .15s}
+.switch[aria-checked="true"]::after{transform:translateX(16px)}
+
+.dow-select{display:flex;gap:6px;flex-wrap:wrap}
+.dow-pill{padding:8px 12px;border-radius:99px;border:1px solid var(--border-strong);background:var(--surface-2);font-size:12.5px;font-weight:700}
+.dow-pill[aria-pressed="true"]{background:var(--red-soft);color:var(--red);border-color:var(--red)}
+
+/* ============ bento banner ============ */
+.banner{margin:14px 16px 0;padding:14px 16px;border-radius:var(--radius-m);display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
+.banner-amber{background:var(--amber-soft);border:1px solid var(--amber)}
+.banner-muted{background:var(--surface-2);border:1px solid var(--border)}
+.banner-title{font-family:var(--font-display);font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.banner-list{font-size:12.5px;color:var(--text-muted);line-height:1.7}
+.banner-list .row{display:flex;justify-content:space-between;padding:2px 0}
+.call-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:99px;background:var(--accent);color:#fff!important;font-weight:700;font-size:14.5px;text-decoration:none;min-height:44px;border:none}
+.call-btn:active{background:var(--accent-strong)}
+
+.bento-others{font-size:12.5px;color:var(--text-muted)}
+.bento-others .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border)}
+.bento-others .row:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+
+<div id="app" class="app-shell"></div>
+<div id="toastWrap" class="toast-wrap"></div>
+<div id="modalRoot"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+ * 弁当注文（bento_index.html） ― 単一HTMLファイル・Firebase版
+ * 「日報」アプリ(index.html)と同じFirebaseプロジェクトを使い、
+ * workers / settings(holiday,admin,bento) / holidays / bentoOrders の
+ * コレクションを共有します(作業者一覧・休日設定・管理者パスワードは日報と共通)。
+ * ========================================================================= */
+
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD_mhgV1Rz7mKSCfoHccFDNPKg-zDQc8oM",
+  authDomain: "daily-work-report-3b521.firebaseapp.com",
+  projectId: "daily-work-report-3b521",
+  storageBucket: "daily-work-report-3b521.firebasestorage.app",
+  messagingSenderId: "1096605483410",
+  appId: "1:1096605483410:web:e465f64e7ed0de4df3014b"
+};
+
+/* ================= GitHub同期(8:15定時メール用) =================
+ * このアプリが動いている実行環境(スケジュール実行タスク)からは組織のネット
+ * ワークポリシーによりFirebase/Google系ドメインへ直接アクセスできないため、
+ * 「今日の注文個数だけ」を、本体とは別の小さな専用リポジトリ(bento-mirror)の
+ * bento-today.jsonへブラウザ側から書き出し、定時メールタスクはそのファイルを
+ * GitHub API経由(認証なしで読める公開リポジトリ)で読み取ってメール送信する。
+ * 実データ(Firestore)には一切影響しない、メール通知専用の一方向ミラー。
+ * トークンはこの専用リポジトリ(webdailyreport本体ではない)のContents権限
+ * (Read/Write)のみに絞ったfine-grained personal access token。公開ページの
+ * ソースに含まれるため、万一漏れてもこの小さな専用リポジトリのファイル操作
+ * 以外はできない(本体のindex.html/bento_index.htmlには触れられない)。 */
+var GITHUB_SYNC = {
+  owner: 'fullmonkeyanz-boop',
+  repo: 'bento-mirror',
+  path: 'bento-today.json',
+  token: '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'
+};
+function githubContentsUrl(){
+  return 'https://api.github.com/repos/' + GITHUB_SYNC.owner + '/' + GITHUB_SYNC.repo + '/contents/' + encodeURIComponent(GITHUB_SYNC.path);
+}
+function utf8ToBase64(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+var _ghSyncInFlight = false;
+var _ghSyncPending = false;
+function syncBentoTodayToGithub(){
+  if (!GITHUB_SYNC.token) return;
+  if (_ghSyncInFlight){ _ghSyncPending = true; return; }
+  _ghSyncInFlight = true;
+
+  var info = computeTodayBentoInfo();
+  var payload = {
+    date: info.dateStr,
+    total: info.total,
+    list: info.list,
+    holiday: info.holiday,
+    phone: state.bentoSettings.phone,
+    notifyEmails: state.bentoSettings.notifyEmails || [],
+    updatedAt: new Date().toISOString()
+  };
+  var body = { message: 'bento-today sync ' + payload.date, content: utf8ToBase64(JSON.stringify(payload, null, 2)) };
+
+  fetch(githubContentsUrl(), {
+    headers: { 'Authorization': 'token ' + GITHUB_SYNC.token, 'Accept': 'application/vnd.github+json' }
+  }).then(function(res){
+    return res.ok ? res.json() : null;
+  }).catch(function(){ return null; }).then(function(existing){
+    if (existing && existing.sha) body.sha = existing.sha;
+    return fetch(githubContentsUrl(), {
+      method: 'PUT',
+      headers: { 'Authorization': 'token ' + GITHUB_SYNC.token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }).catch(function(){ /* 同期失敗はサイレントに無視。Firestoreへの本保存には影響させない */ }).then(function(){
+    _ghSyncInFlight = false;
+    if (_ghSyncPending){ _ghSyncPending = false; syncBentoTodayToGithub(); }
+  });
+}
+
+var DOW_LABELS = ['日','月','火','水','木','金','土'];
+var SALT = 'seiban-nippou-v1::';
+var TABS = [
+  {id:'bento', label:'弁当'},
+  {id:'master', label:'マスター'}
+];
+var SEED_BENTO_SETTINGS = {phone:'087-841-6000', unitPrice:280, subsidyPerUnit:140, notifyEmails:['anzai-keikin@mc.pikara.ne.jp','fullmonkey.anz@gmail.com'], cutoffHour:8, cutoffMinute:15};
+
+var state = {
+  db: null,
+  dbNotConfigured: false,
+  ready: false,
+  view: 'bento',
+  workers: [],
+  holidaySettings: {weeklyOff:[0,6]},
+  holidayExceptions: {},
+  adminUnlocked: false,
+  masterSection: 'workers',
+  bentoSettings: Object.assign({}, SEED_BENTO_SETTINGS),
+  bentoYM: null,
+  bentoDoc: null,
+  bentoDocUnsub: null,
+  bentoSelDate: null,
+  bentoTodayDoc: null,
+  bentoNotifyOn: (function(){ try { return localStorage.getItem('bento_notify_on') === '1'; } catch(e){ return false; } })(),
+  bentoNotifiedFor: null,
+  bentoDragActive: false
+};
+
+function todayParts(){ var d = new Date(); return {y:d.getFullYear(), m:d.getMonth()+1, d:d.getDate()}; }
+var TODAY = todayParts();
+
+/* ================= utils ================= */
+function pad2(n){ return (n<10?'0':'')+n; }
+function ymd(y,m,d){ return y+'-'+pad2(m)+'-'+pad2(d); }
+function yyyymm(y,m){ return ''+y+pad2(m); }
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+function num(v){ var n = parseFloat(v); return isFinite(n) ? n : 0; }
+function prevMonth(y,m){ return m===1 ? {y:y-1,m:12} : {y:y,m:m-1}; }
+function nextMonth(y,m){ return m===12 ? {y:y+1,m:1} : {y:y,m:m+1}; }
+function dowOf(dateStr){ return new Date(dateStr+'T00:00:00').getDay(); }
+function todayStr(){ return ymd(TODAY.y, TODAY.m, TODAY.d); }
+function telHref(phone){ return 'tel:' + String(phone||'').replace(/[^0-9+]/g,''); }
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function isHoliday(dateStr){
+  var ex = state.holidayExceptions[dateStr];
+  if (ex) return ex.type === 'holiday';
+  var dow = dowOf(dateStr);
+  return (state.holidaySettings.weeklyOff||[]).indexOf(dow) !== -1;
+}
+function activeWorkers(){ return state.workers.filter(function(w){return w.active!==false;}).sort(function(a,b){return (a.order||0)-(b.order||0);}); }
+function activeBentoWorkers(){ return activeWorkers().filter(function(w){ return w.bento!==false; }); }
+
+/* ================= bento helpers ================= */
+function getBentoDayAll(doc, day){
+  var key = pad2(day);
+  return (doc && doc.days && doc.days[key]) ? doc.days[key] : {};
+}
+function applyBentoLocal(doc, key, workerId, qty){
+  if (!doc.days) doc.days = {};
+  if (!doc.days[key]) doc.days[key] = {};
+  doc.days[key][workerId] = qty;
+}
+function bentoDayTotalAll(doc, day, workers){
+  var dayAll = getBentoDayAll(doc, day);
+  var total = 0;
+  workers.forEach(function(w){ total += num(dayAll[w.id]); });
+  return total;
+}
+function isBentoCutoffPassed(dateStr, now){
+  if (dateStr !== todayStr()) return false;
+  now = now || new Date();
+  var h = now.getHours(), mi = now.getMinutes();
+  var ch = num(state.bentoSettings.cutoffHour), cm = num(state.bentoSettings.cutoffMinute);
+  return (h > ch) || (h === ch && mi >= cm);
+}
+function isPastDateStr(dateStr){ return dateStr < todayStr(); }
+function bentoLockState(dateStr){
+  if (state.adminUnlocked) return {locked:false, reason:null};
+  if (isHoliday(dateStr)) return {locked:true, reason:'holiday'};
+  if (isPastDateStr(dateStr)) return {locked:true, reason:'past'};
+  if (dateStr === todayStr() && isBentoCutoffPassed(dateStr)) return {locked:true, reason:'cutoff'};
+  return {locked:false, reason:null};
+}
+function computeBentoMonthTotals(doc, y, m, workers){
+  var dim = daysInMonth(y,m);
+  var perWorker = {};
+  workers.forEach(function(w){ perWorker[w.id] = 0; });
+  for (var d=1; d<=dim; d++){
+    var dayAll = getBentoDayAll(doc, d);
+    Object.keys(dayAll).forEach(function(wid){
+      var q = num(dayAll[wid]);
+      if (!q) return;
+      perWorker[wid] = (perWorker[wid]||0) + q;
+    });
+  }
+  var grandQty = 0;
+  Object.keys(perWorker).forEach(function(k){ grandQty += perWorker[k]; });
+  return {perWorker: perWorker, grandQty: grandQty};
+}
+function computeTodayBentoInfo(){
+  var dateStr = todayStr();
+  var dayAll = getBentoDayAll(state.bentoTodayDoc, TODAY.d);
+  var list = [];
+  var total = 0;
+  activeBentoWorkers().forEach(function(w){
+    var q = num(dayAll[w.id]);
+    if (q > 0){ list.push({name:w.name, qty:q}); total += q; }
+  });
+  return {
+    dateStr: dateStr,
+    total: total,
+    list: list,
+    holiday: isHoliday(dateStr),
+    cutoffPassed: isBentoCutoffPassed(dateStr)
+  };
+}
+
+/* ================= browser notification (best-effort, tab must stay open) ================= */
+function checkBentoNotify(){
+  if (!state.bentoNotifyOn) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  var info = computeTodayBentoInfo();
+  if (info.holiday || info.total === 0) return;
+  if (state.bentoNotifiedFor === info.dateStr) return;
+  var now = new Date();
+  if (now.getHours() === num(state.bentoSettings.cutoffHour) && now.getMinutes() === num(state.bentoSettings.cutoffMinute)){
+    state.bentoNotifiedFor = info.dateStr;
+    try {
+      var names = info.list.map(function(it){ return it.name+'×'+it.qty; }).join('、');
+      new Notification('本日のお弁当 合計'+info.total+'個', {
+        body: names + '　→ ' + state.bentoSettings.phone + ' に電話してください'
+      });
+    } catch(e){}
+  }
+}
+
+/* ================= toast / modal ================= */
+function toast(msg, isError){
+  var wrap = document.getElementById('toastWrap');
+  var el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = msg;
+  wrap.appendChild(el);
+  requestAnimationFrame(function(){ el.classList.add('show'); });
+  setTimeout(function(){
+    el.classList.remove('show');
+    setTimeout(function(){ el.remove(); }, 250);
+  }, 2200);
+}
+function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
+function openModal(html){
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-overlay" id="modalOverlay"><div class="modal">' + html + '</div></div>';
+  document.getElementById('modalOverlay').addEventListener('click', function(e){
+    if (e.target.id === 'modalOverlay') closeModal();
+  });
+}
+function confirmModal(title, body, onYes){
+  openModal(
+    '<h3 style="margin-bottom:8px;font-size:15.5px">' + title + '</h3>' +
+    '<p class="caption" style="margin-bottom:16px">' + body + '</p>' +
+    '<div class="btn-row">' +
+      '<button class="btn" data-act="modal-cancel" style="flex:1">キャンセル</button>' +
+      '<button class="btn btn-danger" data-act="modal-yes" style="flex:1">実行</button>' +
+    '</div>'
+  );
+  document.querySelector('[data-act="modal-yes"]').addEventListener('click', function(){ closeModal(); onYes(); });
+  document.querySelector('[data-act="modal-cancel"]').addEventListener('click', closeModal);
+}
+
+/* ================= hashing ================= */
+function sha256Hex(text){
+  var enc = new TextEncoder().encode(SALT + text);
+  return crypto.subtle.digest('SHA-256', enc).then(function(buf){
+    var arr = Array.from(new Uint8Array(buf));
+    return arr.map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  });
+}
+
+/* ================= db bootstrap (日報アプリと同じFirebaseプロジェクト) ================= */
+function initDb(){
+  if (!FIREBASE_CONFIG || FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY'){
+    state.dbNotConfigured = true;
+    render();
+    return;
+  }
+  var db;
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    state.db = db;
+  } catch (e){
+    state.ready = true;
+    render();
+    return;
+  }
+
+  firebase.auth().signInAnonymously().catch(function(){
+    state.ready = true;
+    render();
+  });
+  firebase.auth().onAuthStateChanged(function(user){
+    if (!user) return;
+    startListeners(db);
+  });
+}
+
+function startListeners(db){
+  if (state._listenersStarted) return;
+  state._listenersStarted = true;
+
+  db.collection('workers').orderBy('order').onSnapshot(function(snap){
+    state.workers = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    state.ready = true;
+    render();
+  }, function(){ state.ready = true; render(); });
+
+  db.doc('settings/holiday').onSnapshot(function(snap){
+    state.holidaySettings = snap.exists ? Object.assign({weeklyOff:[0,6]}, snap.data()) : {weeklyOff:[0,6]};
+    render();
+  });
+
+  db.collection('holidays').onSnapshot(function(snap){
+    var map = {};
+    snap.docs.forEach(function(d){ map[d.id] = d.data(); });
+    state.holidayExceptions = map;
+    render();
+  });
+
+  db.doc('settings/admin').get().then(function(snap){
+    state._adminDoc = snap.exists ? snap.data() : null;
+    render();
+  });
+
+  db.doc('settings/bento').onSnapshot(function(snap){
+    if (!snap.exists && !state._seededBentoSettings){
+      state._seededBentoSettings = true;
+      db.doc('settings/bento').set(SEED_BENTO_SETTINGS);
+    }
+    state.bentoSettings = snap.exists ? Object.assign({}, SEED_BENTO_SETTINGS, snap.data()) : Object.assign({}, SEED_BENTO_SETTINGS);
+    render();
+    // 電話番号・通知先メールアドレスの変更もミラーファイルへ反映する。
+    if (state._listenersStarted) syncBentoTodayToGithub();
+  });
+
+  var todayYYYYMM = yyyymm(TODAY.y, TODAY.m);
+  db.doc('bentoOrders/' + todayYYYYMM).onSnapshot(function(snap){
+    state.bentoTodayDoc = snap.exists ? snap.data() : {days:{}};
+    checkBentoNotify();
+    render();
+    // 今日の注文個数が変わる(=誰かがこのページを開いている/操作した)たびに、
+    // 8:15定時メール用のミラーファイルをGitHubへ同期する。
+    syncBentoTodayToGithub();
+  });
+}
+
+/* ================= bento month doc ================= */
+function ensureBentoYM(){ if (!state.bentoYM) state.bentoYM = {y:TODAY.y, m:TODAY.m}; }
+function ensureBentoSelDate(){
+  if (!state.bentoSelDate && state.bentoYM.y===TODAY.y && state.bentoYM.m===TODAY.m){
+    state.bentoSelDate = todayStr();
+  }
+}
+function subscribeBentoMonthDoc(){
+  if (state.bentoDocUnsub){ state.bentoDocUnsub(); state.bentoDocUnsub = null; }
+  state.bentoDoc = null;
+  if (!state.db || !state.bentoYM) { render(); return; }
+  var id = yyyymm(state.bentoYM.y, state.bentoYM.m);
+  state.bentoDocUnsub = state.db.doc('bentoOrders/' + id).onSnapshot(function(snap){
+    if (state.bentoDragActive) return;
+    state.bentoDoc = snap.exists ? snap.data() : {days:{}};
+    render();
+  });
+}
+function saveBentoQty(dateStr, workerId, qty, silent){
+  var parts = dateStr.split('-');
+  var y = +parts[0], m = +parts[1], d = +parts[2];
+  var key = pad2(d);
+  var id = yyyymm(y,m);
+
+  // 楽観的更新: Firestoreからの応答(onSnapshot)を待たず、先にローカルのstateへ反映する。
+  // これをしないと、タップ直後にendDrag()等が呼ぶrender()が「まだサーバーから
+  // 更新が返ってきていない古いstate.bentoDoc」で画面を再構築してしまい、
+  // タップした結果が一瞬で消えたように見える(実際には保存自体は進行中)。
+  if (state.bentoYM && id === yyyymm(state.bentoYM.y, state.bentoYM.m)){
+    if (!state.bentoDoc) state.bentoDoc = {days:{}};
+    applyBentoLocal(state.bentoDoc, key, workerId, qty);
+  }
+  if (dateStr === todayStr()){
+    if (!state.bentoTodayDoc) state.bentoTodayDoc = {days:{}};
+    applyBentoLocal(state.bentoTodayDoc, key, workerId, qty);
+  }
+
+  if (!state.db) return;
+  var ref = state.db.doc('bentoOrders/' + id);
+  var days = {}; days[key] = {}; days[key][workerId] = qty;
+  // set({merge:true})は既存ドキュメントが無ければ作成し、あればネストしたオブジェクトを
+  // キー単位で再帰マージする(update()に素のオブジェクトを渡すと、その月のdaysフィールド
+  // 全体を丸ごと上書きしてしまい、かつドキュメントが存在しない新規の月では失敗する)。
+  ref.set({yyyymm: id, days: days, updatedAt: Date.now()}, {merge:true}).then(function(){
+    if (!silent) toast('注文を保存しました');
+  }).catch(function(){
+    toast('保存に失敗しました', true);
+    // ローカルの楽観的表示を破棄し、サーバーの状態を取り直す
+    subscribeBentoMonthDoc();
+  });
+}
+function saveBentoInvoice(dateY, dateM, amount){
+  if (!state.db) return;
+  var id = yyyymm(dateY, dateM);
+  var ref = state.db.doc('bentoOrders/' + id);
+  ref.set({yyyymm:id, invoiceAmount: amount, updatedAt: Date.now()}, {merge:true}).then(function(){
+    toast('請求金額を保存しました');
+  }).catch(function(){ toast('保存に失敗しました', true); });
+}
+
+/* ================= render root ================= */
+// render()はapp.innerHTMLを丸ごと作り直すため、そのままだと注文一覧テーブルの
+// スクロール位置やページ全体のスクロール位置が毎回リセットされ、マスをタップする
+// たびに表示が月の先頭(1日目)に戻ってしまう。そこで、明示的にresetScrollを
+// 指定した場合(月の切り替えなど)を除き、直前のスクロール位置を保持する。
+function captureScrollState(){
+  var tableEl = document.querySelector('.order-table-wrap');
+  return {
+    windowY: window.scrollY,
+    tableScrollTop: tableEl ? tableEl.scrollTop : null
+  };
+}
+function restoreScrollState(s){
+  if (s.tableScrollTop !== null){
+    var tableEl = document.querySelector('.order-table-wrap');
+    if (tableEl) tableEl.scrollTop = s.tableScrollTop;
+  }
+  window.scrollTo(0, s.windowY);
+}
+function render(opts){
+  if (state.bentoDragActive) return;
+  var resetScroll = opts && opts.resetScroll;
+  var scrollState = resetScroll ? null : captureScrollState();
+  renderInner();
+  if (scrollState) restoreScrollState(scrollState);
+}
+function renderInner(){
+  var app = document.getElementById('app');
+
+  if (state.dbNotConfigured){
+    app.innerHTML =
+      '<div class="view" style="padding-top:24px"><div class="panel gate-wrap">' +
+        '<div class="icon">⚙️</div>' +
+        '<h2>Firebaseの設定が必要です</h2>' +
+        '<p class="caption">bento_index.html 内の FIREBASE_CONFIG を確認してください。</p>' +
+      '</div></div>';
+    return;
+  }
+
+  var html = renderTopbar();
+  if (!state.ready){
+    html += '<div class="view"><p class="caption">読み込み中…</p></div>';
+    app.innerHTML = html;
+    bindTopbar();
+    return;
+  }
+  if (!state.db){
+    html += '<div class="view"><div class="panel"><p class="caption">データベースに接続できませんでした。</p></div></div>';
+    app.innerHTML = html;
+    bindTopbar();
+    return;
+  }
+
+  html += renderBentoBanner();
+  if (state.view === 'bento') html += renderBentoView();
+  else html += renderMasterView();
+  html += renderFooter();
+  app.innerHTML = html;
+  bindTopbar();
+  bindView();
+}
+
+function renderBentoBanner(){
+  var info = computeTodayBentoInfo();
+  if (info.holiday || info.total === 0) return '';
+  var namesHtml = info.list.map(function(it){
+    return '<div class="row"><span>'+escapeHtml(it.name)+'</span><span>'+it.qty+'個</span></div>';
+  }).join('');
+  if (!info.cutoffPassed){
+    return (
+      '<div class="banner banner-amber">' +
+        '<div class="banner-title">🍱 本日のお弁当　合計 '+info.total+'個　—　'+pad2(num(state.bentoSettings.cutoffHour))+':'+pad2(num(state.bentoSettings.cutoffMinute))+'までに要連絡</div>' +
+        '<div class="banner-list">' + namesHtml + '</div>' +
+        '<div class="btn-row" style="margin-top:8px">' +
+          '<button type="button" class="call-btn" data-act="call-tsukasa">📞 つかさへ連絡</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+  return (
+    '<div class="banner banner-muted">' +
+      '<div class="banner-title">本日の注文（'+info.total+'個）は締め切りました</div>' +
+    '</div>'
+  );
+}
+
+function renderTopbar(){
+  var tabsHtml = TABS.map(function(t){
+    return '<button class="tab" data-tab="'+t.id+'" aria-selected="'+(state.view===t.id)+'">'+t.label+'</button>';
+  }).join('');
+  return (
+    '<div class="topbar">' +
+      '<div class="topbar-row">' +
+        '<div class="brand"><span class="mark">弁当注文</span><span class="sub">お弁当の注文管理</span></div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-act="back-to-nippou" style="padding:4px 8px">← 日報へ戻る</button>' +
+      '</div>' +
+      '<div class="tabs" role="tablist">' + tabsHtml + '</div>' +
+    '</div>'
+  );
+}
+function renderFooter(){
+  return '<footer class="app-footer"><p>弁当タブのマスをタップ/ドラッグして注文を登録してください</p></footer>';
+}
+function bindTopbar(){
+  document.querySelectorAll('.tab').forEach(function(el){
+    el.addEventListener('click', function(){
+      state.view = el.getAttribute('data-tab');
+      if (state.view === 'bento'){ ensureBentoYM(); subscribeBentoMonthDoc(); }
+      render({resetScroll:true});
+    });
+  });
+  var callBtn = document.querySelector('[data-act="call-tsukasa"]');
+  if (callBtn) callBtn.addEventListener('click', function(){
+    var phone = state.bentoSettings.phone;
+    confirmModal('つかさへ連絡', escapeHtml(phone) + ' に電話をかけます。よろしいですか？', function(){
+      window.location.href = telHref(phone);
+    });
+  });
+  var backBtn = document.querySelector('[data-act="back-to-nippou"]');
+  if (backBtn) backBtn.addEventListener('click', function(){
+    // 日報アプリからリンクを新しいタブ/ウィンドウで開いた場合はそのタブを閉じる。
+    // 同じタブ内の遷移で来た場合(履歴が残っている場合)はブラウザの「戻る」と同じ動作にする。
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.close();
+    }
+  });
+}
+
+/* ================= BENTO VIEW ================= */
+function renderBentoView(){
+  ensureBentoYM();
+  ensureBentoSelDate();
+  if (!state.bentoDoc && !state.bentoDocUnsub) subscribeBentoMonthDoc();
+
+  var y = state.bentoYM.y, m = state.bentoYM.m;
+  var dim = daysInMonth(y,m);
+  var firstDow = dowOf(ymd(y,m,1));
+  var bentoWorkers = activeBentoWorkers();
+  if (bentoWorkers.length === 0){
+    return '<div class="view"><div class="panel"><p class="caption">弁当注文の対象者が設定されていません。マスター画面の「作業者」で対象者を設定してください。</p></div></div>';
+  }
+
+  var cells = '';
+  for (var i=0;i<firstDow;i++) cells += '<div class="day-cell off"></div>';
+  for (var d=1; d<=dim; d++){
+    var dateStr = ymd(y,m,d);
+    var total = bentoDayTotalAll(state.bentoDoc, d, bentoWorkers);
+    var cls = 'day-cell';
+    if (isHoliday(dateStr)) cls += ' holiday';
+    if (dateStr === todayStr()) cls += ' today';
+    if (dateStr === state.bentoSelDate) cls += ' selected';
+    if (total > 0) cls += ' has-entry';
+    cells += '<div class="'+cls+'" data-bday="'+d+'"><span class="dnum">'+d+'</span>' +
+      (total > 0 ? '<span class="dhour">'+total+'個</span>' : '') + '</div>';
+  }
+  var dowRow = DOW_LABELS.map(function(l){ return '<div class="dow">'+l+'</div>'; }).join('');
+
+  var summaryHtml = state.bentoSelDate ? renderBentoDaySummary(state.bentoSelDate, bentoWorkers) : '';
+  var orderTableHtml = renderBentoOrderTable(y, m, state.bentoDoc, bentoWorkers);
+  var totalsHtml = renderBentoMonthSummary(y, m, state.bentoDoc);
+
+  return (
+    '<div class="view stack">' +
+      '<div class="panel">' +
+        '<div class="caption" style="margin-bottom:8px">お弁当の注文は当日'+num(state.bentoSettings.cutoffHour)+'時'+pad2(num(state.bentoSettings.cutoffMinute))+'分まで変更可能です</div>' +
+        '<div class="list-row" style="padding:4px 0 10px;border:none">' +
+          '<span class="caption" style="flex:1">'+pad2(num(state.bentoSettings.cutoffHour))+':'+pad2(num(state.bentoSettings.cutoffMinute))+'にこのブラウザで通知する（開いている間のみ）</span>' +
+          '<button class="switch" role="switch" aria-checked="'+state.bentoNotifyOn+'" data-act="toggle-bento-notify"></button>' +
+        '</div>' +
+        '<div class="month-nav">' +
+          '<button class="icon-btn" data-act="bento-prev-month">‹</button>' +
+          '<span class="label">'+y+'年 '+m+'月</span>' +
+          '<button class="icon-btn" data-act="bento-next-month">›</button>' +
+        '</div>' +
+        '<div class="day-grid">' + dowRow + cells + '</div>' +
+      '</div>' +
+      summaryHtml +
+      orderTableHtml +
+      totalsHtml +
+    '</div>'
+  );
+}
+
+function renderBentoDaySummary(dateStr, bentoWorkers){
+  var parts = dateStr.split('-');
+  var d = +parts[2];
+  var dow = DOW_LABELS[dowOf(dateStr)];
+  var dayAll = getBentoDayAll(state.bentoDoc, d);
+  var orderers = [];
+  var total = 0;
+  bentoWorkers.forEach(function(w){
+    var q = num(dayAll[w.id]);
+    if (q > 0){ orderers.push({name:w.name, qty:q}); total += q; }
+  });
+  var listHtml = orderers.length
+    ? orderers.map(function(o){ return '<div class="row"><span>'+escapeHtml(o.name)+'</span><span>'+o.qty+'個</span></div>'; }).join('')
+    : '<p class="caption">この日の注文はまだありません。</p>';
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head">' +
+        '<div class="day-form-title">' +
+          (+parts[1])+'月'+d+'日（'+dow+'）' +
+          (isHoliday(dateStr) ? '<span class="chip chip-red">休日</span>' : '') +
+        '</div>' +
+        '<span class="total-badge">'+total+'個</span>' +
+      '</div>' +
+      '<div class="bento-others">'+listHtml+'</div>' +
+    '</div>'
+  );
+}
+
+function renderBentoOrderTable(y, m, doc, workers){
+  var dim = daysInMonth(y,m);
+  var perWorkerTotal = {};
+  workers.forEach(function(w){ perWorkerTotal[w.id] = 0; });
+  var grandQty = 0;
+  var rows = '';
+  for (var d=1; d<=dim; d++){
+    var dateStr = ymd(y,m,d);
+    var dayAll = getBentoDayAll(doc, d);
+    var rowTotal = 0;
+    var locked = bentoLockState(dateStr).locked;
+    var cellsHtml = workers.map(function(w){
+      var q = num(dayAll[w.id]);
+      if (q > 0){ perWorkerTotal[w.id] += q; rowTotal += q; }
+      return '<td class="order-td"><button type="button" class="order-cell'+(q>0?' on':'')+(locked?' locked':'')+'" data-oday="'+d+'" data-oworker="'+w.id+'">'+(q>0?q:'')+'</button></td>';
+    }).join('');
+    grandQty += rowTotal;
+    var rowCls = isHoliday(dateStr) ? ' class="bento-row-holiday"' : '';
+    rows += '<tr'+rowCls+'><td>'+d+'日('+DOW_LABELS[dowOf(dateStr)]+')</td>' + cellsHtml + '<td>'+(rowTotal>0?rowTotal:'')+'</td></tr>';
+  }
+  var headCells = workers.map(function(w){ return '<th class="bento-name-th">'+escapeHtml(w.name)+'</th>'; }).join('');
+  var footQtyCells = workers.map(function(w){ return '<td>'+(perWorkerTotal[w.id]||0)+'</td>'; }).join('');
+  var footYenCells = workers.map(function(w){ return '<td class="bento-yen-cell">'+((perWorkerTotal[w.id]||0)*state.bentoSettings.unitPrice).toLocaleString()+'</td>'; }).join('');
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head"><h2>'+y+'年'+m+'月　注文一覧</h2></div>' +
+      '<p class="caption" style="margin-bottom:10px">マスに触れると注文ON/OFFを切り替えられます。押したまま横（または縦）になぞると、なぞった先すべてに同じON/OFFを適用します。過去の日付・休日・本日'+pad2(num(state.bentoSettings.cutoffHour))+':'+pad2(num(state.bentoSettings.cutoffMinute))+'以降は編集できませんが、マスターで管理者ロックを解除すればすべて編集できます。</p>' +
+      '<div class="table-scroll order-table-wrap"><table class="ledger bento-table"><thead><tr><th>日付</th>'+headCells+'<th>合計</th></tr></thead>' +
+        '<tbody>'+rows+'</tbody>' +
+        '<tfoot>' +
+          '<tr><td>合計/食</td>'+footQtyCells+'<td>'+grandQty+'</td></tr>' +
+          '<tr><td>合計/円</td>'+footYenCells+'<td class="bento-yen-cell">'+(grandQty*state.bentoSettings.unitPrice).toLocaleString()+'</td></tr>' +
+        '</tfoot>' +
+      '</table></div>' +
+    '</div>'
+  );
+}
+
+function renderBentoMonthSummary(y, m, doc){
+  var workers = activeBentoWorkers();
+  var tot = computeBentoMonthTotals(doc, y, m, workers);
+  var employeeTotal = tot.grandQty * state.bentoSettings.unitPrice;
+  var subsidyTotal = tot.grandQty * state.bentoSettings.subsidyPerUnit;
+  var combinedTotal = employeeTotal + subsidyTotal;
+  var invoiceAmount = (doc && doc.invoiceAmount!==undefined && doc.invoiceAmount!==null) ? doc.invoiceAmount : null;
+  var diff = invoiceAmount!==null ? (subsidyTotal - invoiceAmount) : null;
+  var matchChip = '';
+  if (invoiceAmount!==null){
+    matchChip = diff===0
+      ? '<span class="chip chip-green">一致</span>'
+      : '<span class="chip chip-red">預り金精算不一致</span>';
+  }
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head"><h2>金額チェック</h2></div>' +
+      '<div class="btn-row" style="flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:14px">' +
+        '<div><div class="caption">社員負担額合計（'+state.bentoSettings.unitPrice+'円×'+tot.grandQty+'個）</div>' +
+          '<div class="mono" style="font-size:18px;font-weight:700">'+employeeTotal.toLocaleString()+'円</div></div>' +
+        '<div><div class="caption">会社負担額合計（'+state.bentoSettings.subsidyPerUnit+'円×'+tot.grandQty+'個）</div>' +
+          '<div class="mono" style="font-size:18px;font-weight:700;color:var(--accent-strong)">'+subsidyTotal.toLocaleString()+'円</div></div>' +
+        '<div><div class="caption">合計金額（社員負担＋会社負担）</div>' +
+          '<div class="mono" style="font-size:18px;font-weight:700">'+combinedTotal.toLocaleString()+'円</div></div>' +
+      '</div>' +
+      '<div class="btn-row" style="flex-wrap:wrap;gap:14px;align-items:flex-end">' +
+        '<div class="field" style="max-width:160px">' +
+          '<label>弁当屋の請求金額</label>' +
+          '<input type="number" class="num-input" id="bentoInvoiceInput" placeholder="例）'+subsidyTotal+'" value="'+(invoiceAmount!==null?invoiceAmount:'')+'">' +
+        '</div>' +
+        '<button class="btn btn-sm" data-act="save-invoice">保存</button>' +
+        matchChip +
+      '</div>' +
+      (matchChip && diff!==0 ? '<p class="caption" style="margin-top:8px">会社負担額合計との差額：'+(diff>0?'+':'')+diff.toLocaleString()+'円</p>' : '') +
+    '</div>'
+  );
+}
+
+function bindBentoView(){
+  var prevM = document.querySelector('[data-act="bento-prev-month"]');
+  var nextM = document.querySelector('[data-act="bento-next-month"]');
+  if (prevM) prevM.addEventListener('click', function(){ state.bentoYM = prevMonth(state.bentoYM.y, state.bentoYM.m); state.bentoSelDate=null; subscribeBentoMonthDoc(); render({resetScroll:true}); });
+  if (nextM) nextM.addEventListener('click', function(){ state.bentoYM = nextMonth(state.bentoYM.y, state.bentoYM.m); state.bentoSelDate=null; subscribeBentoMonthDoc(); render({resetScroll:true}); });
+
+  document.querySelectorAll('[data-bday]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var d = +el.getAttribute('data-bday');
+      state.bentoSelDate = ymd(state.bentoYM.y, state.bentoYM.m, d);
+      render();
+    });
+  });
+
+  var notifyToggle = document.querySelector('[data-act="toggle-bento-notify"]');
+  if (notifyToggle) notifyToggle.addEventListener('click', function(){
+    if (!state.bentoNotifyOn){
+      if (!('Notification' in window)){ toast('このブラウザは通知に対応していません', true); return; }
+      Notification.requestPermission().then(function(perm){
+        if (perm === 'granted'){
+          state.bentoNotifyOn = true;
+          try { localStorage.setItem('bento_notify_on', '1'); } catch(e){}
+          toast('通知をオンにしました');
+        } else {
+          toast('通知が許可されませんでした', true);
+        }
+        render();
+      });
+    } else {
+      state.bentoNotifyOn = false;
+      try { localStorage.setItem('bento_notify_on', '0'); } catch(e){}
+      render();
+    }
+  });
+
+  var saveInvBtn = document.querySelector('[data-act="save-invoice"]');
+  if (saveInvBtn) saveInvBtn.addEventListener('click', function(){
+    var el = document.getElementById('bentoInvoiceInput');
+    var v = el ? num(el.value) : 0;
+    saveBentoInvoice(state.bentoYM.y, state.bentoYM.m, v);
+  });
+
+  bindBentoOrderTable();
+}
+
+function bindBentoOrderTable(){
+  var cells = document.querySelectorAll('.order-cell');
+  if (!cells.length) return;
+  var drag = null;
+
+  function dateOf(cell){ return ymd(state.bentoYM.y, state.bentoYM.m, +cell.getAttribute('data-oday')); }
+
+  function applyCell(cell, enable){
+    var dateStr = dateOf(cell);
+    var workerId = cell.getAttribute('data-oworker');
+    var key = dateStr + '_' + workerId;
+    if (drag && drag.applied[key]) return;
+    var lock = bentoLockState(dateStr);
+    if (lock.locked){ return; }
+    var qty = enable ? 1 : 0;
+    cell.classList.toggle('on', enable);
+    cell.textContent = enable ? '1' : '';
+    if (drag){ drag.applied[key] = true; drag.count++; }
+    saveBentoQty(dateStr, workerId, qty, true);
+  }
+
+  function endDrag(){
+    if (!drag) return;
+    var count = drag.count;
+    drag = null;
+    state.bentoDragActive = false;
+    if (count > 1) toast(count+'件を更新しました');
+    else if (count === 1) toast('注文を保存しました');
+    render();
+  }
+
+  cells.forEach(function(cell){
+    cell.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      state.bentoDragActive = true;
+      var startEnable = !cell.classList.contains('on');
+      drag = {enable: startEnable, applied:{}, count:0};
+      try { cell.setPointerCapture(e.pointerId); } catch(err){}
+      applyCell(cell, startEnable);
+    });
+    cell.addEventListener('pointermove', function(e){
+      if (!drag) return;
+      var el = document.elementFromPoint(e.clientX, e.clientY);
+      var target = el ? el.closest('.order-cell') : null;
+      if (target) applyCell(target, drag.enable);
+    });
+    cell.addEventListener('pointerup', endDrag);
+    cell.addEventListener('pointercancel', endDrag);
+  });
+  document.addEventListener('pointerup', function(){ if (drag) endDrag(); });
+}
+
+/* ================= MASTER VIEW (作業者・休日設定・弁当設定・パスワードは日報と共通) ================= */
+function renderMasterView(){
+  if (!state.adminUnlocked){
+    if (!state._adminDoc){
+      return (
+        '<div class="view"><div class="panel gate-wrap">' +
+          '<div class="icon">🔒</div>' +
+          '<h2>管理者パスワードの初期設定</h2>' +
+          '<p class="caption">マスター編集用の簡易パスワードを設定してください（日報アプリと共通です）。</p>' +
+          '<div class="field" style="width:100%;max-width:280px"><input type="password" id="pwSetup1" placeholder="新しいパスワード"></div>' +
+          '<div class="field" style="width:100%;max-width:280px"><input type="password" id="pwSetup2" placeholder="確認のため再入力"></div>' +
+          '<button class="btn btn-primary" data-act="admin-setup">設定する</button>' +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div class="view"><div class="panel gate-wrap">' +
+        '<div class="icon">🔒</div>' +
+        '<h2>マスター管理</h2>' +
+        '<p class="caption">管理者パスワードを入力してください（日報アプリと共通です）。</p>' +
+        '<div class="field" style="width:100%;max-width:280px"><input type="password" id="pwLogin" placeholder="パスワード"></div>' +
+        '<button class="btn btn-primary" data-act="admin-login">ロック解除</button>' +
+      '</div></div>'
+    );
+  }
+
+  var secTabs = [
+    {id:'workers', label:'作業者'},
+    {id:'holiday', label:'休日設定'},
+    {id:'bentoSettings', label:'弁当設定'},
+    {id:'security', label:'パスワード'}
+  ].map(function(s){
+    return '<button class="tab" data-msec="'+s.id+'" aria-selected="'+(state.masterSection===s.id)+'">'+s.label+'</button>';
+  }).join('');
+
+  var body = '';
+  if (state.masterSection==='workers') body = renderMasterWorkers();
+  else if (state.masterSection==='holiday') body = renderMasterHoliday();
+  else if (state.masterSection==='bentoSettings') body = renderMasterBentoSettings();
+  else body = renderMasterSecurity();
+
+  return (
+    '<div class="view stack">' +
+      '<div class="panel" style="padding:6px"><div class="tabs">'+secTabs+'</div></div>' +
+      body +
+      '<button class="btn btn-ghost" data-act="admin-lock">画面をロックする</button>' +
+    '</div>'
+  );
+}
+
+function renderMasterWorkers(){
+  var rows = state.workers.slice().sort(function(a,b){return (a.order||0)-(b.order||0);}).map(function(w){
+    return (
+      '<div class="list-row" style="flex-wrap:wrap;row-gap:8px">' +
+        '<span class="name" style="flex:1 1 100%">'+escapeHtml(w.name)+(w.active===false?' <span class="caption" style="font-weight:400">（非稼働）</span>':'')+'</span>' +
+        '<span class="caption">弁当注文</span>' +
+        '<button class="switch" role="switch" aria-checked="'+(w.bento!==false)+'" data-toggle-bento="'+w.id+'"></button>' +
+      '</div>'
+    );
+  }).join('');
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head"><h2>作業者マスター</h2></div>' +
+      '<p class="caption" style="margin-bottom:8px">作業者の追加・削除・稼働状態は日報アプリのマスター画面で行ってください。ここでは「弁当注文」対象の切り替えのみできます。OFFにすると、その人は弁当タブの一覧・リマインダーに表示されなくなります。</p>' +
+      '<div class="stack" style="gap:0">'+rows+'</div>' +
+    '</div>'
+  );
+}
+function renderMasterHoliday(){
+  var pills = DOW_LABELS.map(function(l,i){
+    var on = (state.holidaySettings.weeklyOff||[]).indexOf(i) !== -1;
+    return '<button class="dow-pill" aria-pressed="'+on+'" data-dow="'+i+'">'+l+'</button>';
+  }).join('');
+  var exList = Object.keys(state.holidayExceptions).sort().reverse().slice(0,60).map(function(dt){
+    var ex = state.holidayExceptions[dt];
+    return (
+      '<div class="list-row">' +
+        '<span class="code mono" style="min-width:34px">'+dt+'</span>' +
+        '<span class="name">'+(ex.type==='holiday'?'<span class="chip chip-red">休日</span>':'<span class="chip chip-accent">出勤日</span>')+' '+escapeHtml(ex.label||'')+'</span>' +
+      '</div>'
+    );
+  }).join('');
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head"><h2>休日設定（日報と共通）</h2></div>' +
+      '<p class="caption" style="margin-bottom:8px">休日の追加・変更は日報アプリのマスター画面で行うことをおすすめします。ここでは毎週の定休日のみ変更できます。</p>' +
+      '<div class="eyebrow" style="margin-bottom:8px">毎週の定休日</div>' +
+      '<div class="dow-select">'+pills+'</div>' +
+      '<hr class="divider" style="margin:16px 0">' +
+      '<div class="eyebrow" style="margin-bottom:8px">個別の休日・出勤日（閲覧のみ）</div>' +
+      (exList || '<p class="caption">登録された個別日はまだありません。</p>') +
+    '</div>'
+  );
+}
+function renderMasterBentoSettings(){
+  var s = state.bentoSettings;
+  var emails = (s.notifyEmails||[]).join('\n');
+  var cutoffValue = pad2(num(s.cutoffHour))+':'+pad2(num(s.cutoffMinute));
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head"><h2>弁当注文の設定</h2></div>' +
+      '<div class="field"><label>お弁当屋さんの電話番号</label><input type="text" id="bsPhone" value="'+escapeHtml(s.phone)+'"></div>' +
+      '<div class="field-row" style="margin-top:10px">' +
+        '<div class="field"><label>1個あたり社員負担額（円）</label><input type="number" class="num-input" id="bsUnitPrice" value="'+s.unitPrice+'"></div>' +
+        '<div class="field"><label>1個あたり会社負担額（円）</label><input type="number" class="num-input" id="bsSubsidy" value="'+s.subsidyPerUnit+'"></div>' +
+      '</div>' +
+      '<div class="field" style="margin-top:10px"><label>注文の締め切り時刻（この時刻を過ぎると当日分は編集不可）</label><input type="time" id="bsCutoff" value="'+cutoffValue+'"></div>' +
+      '<div class="field" style="margin-top:10px"><label>毎朝の弁当数メール通知の宛先（1行に1つ）</label><textarea id="bsNotifyEmails" rows="3" style="font-family:var(--font-mono);font-size:12.5px">'+escapeHtml(emails)+'</textarea></div>' +
+      '<button class="btn btn-primary" style="margin-top:14px" data-act="save-bento-settings">保存する</button>' +
+      '<hr class="divider" style="margin:16px 0">' +
+      '<p class="caption">毎朝の締め切り時刻に、その日の弁当注文数をこの宛先へ自動メール送信します（定型タスクによる送信。アプリを閉じていても届きます）。</p>' +
+    '</div>'
+  );
+}
+function renderMasterSecurity(){
+  return (
+    '<div class="panel">' +
+      '<div class="panel-head"><h2>管理者パスワードの変更</h2></div>' +
+      '<p class="caption" style="margin-bottom:10px">日報アプリと共通のパスワードです。ここで変更すると日報アプリ側にも反映されます。</p>' +
+      '<div class="field"><label>新しいパスワード</label><input type="password" id="pwNew1"></div>' +
+      '<div class="field" style="margin-top:10px"><label>確認のため再入力</label><input type="password" id="pwNew2"></div>' +
+      '<button class="btn btn-primary" style="margin-top:12px" data-act="admin-change">変更する</button>' +
+    '</div>'
+  );
+}
+
+/* ================= bind view events ================= */
+function bindView(){
+  if (state.view === 'bento') bindBentoView();
+  else bindMasterView();
+}
+
+function bindMasterView(){
+  var setupBtn = document.querySelector('[data-act="admin-setup"]');
+  if (setupBtn) setupBtn.addEventListener('click', function(){
+    var p1 = document.getElementById('pwSetup1').value;
+    var p2 = document.getElementById('pwSetup2').value;
+    if (!p1 || p1.length < 3){ toast('3文字以上で入力してください', true); return; }
+    if (p1 !== p2){ toast('パスワードが一致しません', true); return; }
+    sha256Hex(p1).then(function(hash){
+      return state.db.doc('settings/admin').set({passwordHash: hash, updatedAt: Date.now()});
+    }).then(function(){
+      state._adminDoc = {passwordHash:true};
+      state.adminUnlocked = true;
+      toast('パスワードを設定しました');
+      render();
+    });
+  });
+  var loginBtn = document.querySelector('[data-act="admin-login"]');
+  if (loginBtn) loginBtn.addEventListener('click', function(){
+    var pw = document.getElementById('pwLogin').value;
+    sha256Hex(pw).then(function(hash){
+      state.db.doc('settings/admin').get().then(function(snap){
+        var d = snap.data();
+        if (d && d.passwordHash === hash){
+          state.adminUnlocked = true;
+          render();
+        } else {
+          toast('パスワードが違います', true);
+        }
+      });
+    });
+  });
+  var lockBtn = document.querySelector('[data-act="admin-lock"]');
+  if (lockBtn) lockBtn.addEventListener('click', function(){ state.adminUnlocked = false; render(); });
+
+  document.querySelectorAll('[data-msec]').forEach(function(el){
+    el.addEventListener('click', function(){ state.masterSection = el.getAttribute('data-msec'); render({resetScroll:true}); });
+  });
+
+  document.querySelectorAll('[data-toggle-bento]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var id = el.getAttribute('data-toggle-bento');
+      var w = state.workers.find(function(x){return x.id===id;});
+      state.db.collection('workers').doc(id).update({bento: !(w.bento!==false)});
+    });
+  });
+
+  document.querySelectorAll('[data-dow]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var dow = +el.getAttribute('data-dow');
+      var cur = (state.holidaySettings.weeklyOff||[]).slice();
+      var idx = cur.indexOf(dow);
+      if (idx===-1) cur.push(dow); else cur.splice(idx,1);
+      state.db.doc('settings/holiday').set({weeklyOff:cur}, {merge:true});
+    });
+  });
+
+  var saveBentoSettingsBtn = document.querySelector('[data-act="save-bento-settings"]');
+  if (saveBentoSettingsBtn) saveBentoSettingsBtn.addEventListener('click', function(){
+    var phone = document.getElementById('bsPhone').value.trim();
+    var unitPrice = num(document.getElementById('bsUnitPrice').value);
+    var subsidy = num(document.getElementById('bsSubsidy').value);
+    var notifyEmails = (document.getElementById('bsNotifyEmails').value||'')
+      .split(/[\n,]+/).map(function(s){ return s.trim(); }).filter(function(s){ return s; });
+    var cutoffRaw = (document.getElementById('bsCutoff').value||'').split(':');
+    var cutoffHour = cutoffRaw.length===2 ? (+cutoffRaw[0]) : num(state.bentoSettings.cutoffHour);
+    var cutoffMinute = cutoffRaw.length===2 ? (+cutoffRaw[1]) : num(state.bentoSettings.cutoffMinute);
+    if (!phone){ toast('電話番号を入力してください', true); return; }
+    if (!isFinite(cutoffHour) || !isFinite(cutoffMinute)){ toast('締め切り時刻を入力してください', true); return; }
+    state.db.doc('settings/bento').set({phone:phone, unitPrice:unitPrice, subsidyPerUnit:subsidy, notifyEmails:notifyEmails, cutoffHour:cutoffHour, cutoffMinute:cutoffMinute}, {merge:true}).then(function(){
+      toast('保存しました');
+    });
+  });
+
+  var changeBtn = document.querySelector('[data-act="admin-change"]');
+  if (changeBtn) changeBtn.addEventListener('click', function(){
+    var p1 = document.getElementById('pwNew1').value;
+    var p2 = document.getElementById('pwNew2').value;
+    if (!p1 || p1.length < 3){ toast('3文字以上で入力してください', true); return; }
+    if (p1 !== p2){ toast('パスワードが一致しません', true); return; }
+    sha256Hex(p1).then(function(hash){
+      return state.db.doc('settings/admin').set({passwordHash: hash, updatedAt: Date.now()});
+    }).then(function(){ toast('パスワードを変更しました'); });
+  });
+}
+
+/* ================= boot ================= */
+render();
+initDb();
+setInterval(checkBentoNotify, 20000);
+
+})();
+</script>
+</body>
+</html>
