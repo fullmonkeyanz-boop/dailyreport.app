@@ -117,14 +117,6 @@ a{color:var(--accent)}
 .who{display:flex;align-items:baseline;gap:8px}
 .who .who-name{font-family:var(--font-display);font-weight:900;font-size:19px;letter-spacing:.02em;color:var(--text)}
 .who button{background:none;border:none;color:var(--accent);font-size:12px;padding:2px 4px;text-decoration:underline;text-underline-offset:2px}
-.bento-link-big{
-  display:inline-flex;align-items:center;justify-content:center;gap:5px;
-  padding:6px 12px;border-radius:var(--radius-m);
-  background:var(--accent);color:#fff!important;font-weight:800;font-size:12.5px;letter-spacing:.01em;
-  text-decoration:none;min-height:20px;box-shadow:var(--shadow);
-}
-.bento-link-big:active{background:var(--accent-strong)}
-.bento-link-wrap{text-align:center;margin:0 0 12px}
 .bento-cal-big .dnum{font-size:16px}
 .bento-cal-big .dhour{font-size:12.5px}
 .bento-cal-big .day-cell{min-height:52px}
@@ -186,6 +178,7 @@ a{color:var(--accent)}
 .field-row>.field{min-width:0}
 .field-row>.field input,.field-row>.field select{min-width:0}
 .num-input{font-family:var(--font-mono);text-align:right}
+.num-input[readonly]{background:var(--surface-2)}
 @media (max-width:380px){
   .field-row{grid-template-columns:1fr}
   .field input[type="date"]{max-width:none}
@@ -308,9 +301,6 @@ table.ledger tfoot td{font-weight:700;background:var(--surface-2);border-top:1.5
 .dow-pill[aria-pressed="true"]{background:var(--red-soft);color:var(--red);border-color:var(--red)}
 
 /* ============ 弁当注文 ============ */
-.bento-banner{margin:10px 16px 0;background:var(--accent-soft);border-color:var(--accent-soft-strong)}
-.bento-banner p{margin:0}
-.bento-banner.closed{background:var(--surface-2);border-color:var(--border)}
 table.ledger.bento-table{min-width:0;width:auto;table-layout:auto}
 table.ledger.bento-table th,table.ledger.bento-table td{padding:2px 1px;text-align:center}
 table.ledger.bento-table th:first-child,table.ledger.bento-table td:first-child{text-align:left;padding-left:4px;white-space:nowrap}
@@ -372,29 +362,6 @@ var FIREBASE_CONFIG = {
 (function(){
 "use strict";
 
-/* ---- デバッグ用: 予期しないJSエラーが出たら画面上部に赤いバナーで表示する。
-   携帯だけで弁当ボタンが反応しない不具合の原因調査用。原因が分かったら削除してよい。 ---- */
-(function(){
-  var shown = 0;
-  function showErrBanner(text){
-    shown++;
-    if (shown > 5) return; // 大量発生時に画面を埋め尽くさない
-    var box = document.createElement('div');
-    box.style.cssText = 'position:fixed;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;'+
-      'font-size:11px;line-height:1.4;padding:8px 10px;white-space:pre-wrap;word-break:break-all;'+
-      'top:' + ((shown-1)*46) + 'px;';
-    box.textContent = 'JSエラー: ' + text;
-    document.body.appendChild(box);
-  }
-  window.addEventListener('error', function(e){
-    showErrBanner((e.message||String(e)) + ' (' + (e.filename||'') + ':' + (e.lineno||'') + ')');
-  });
-  window.addEventListener('unhandledrejection', function(e){
-    var r = e.reason;
-    showErrBanner('Promise: ' + (r && r.message ? r.message : String(r)));
-  });
-})();
-
 /* ================= constants ================= */
 var DOW_LABELS = ['日','月','火','水','木','金','土'];
 var SALT = 'seiban-nippou-v1::';
@@ -422,7 +389,10 @@ var FIELD_DEFS = [
 ];
 var CARRY_KEYS = ['overtime','late','paidLeave','absence','holidayWork']; // 20日締めで繰越対象
 var ZATSUYOU_CODE = '0';   // 「雑用その他」選択時は作業内容を手入力できる
+var SEKKEI_CODE = '000';   // 「設計」選択時は作業内容を手入力できる
 var MAEYAMA_CODE = '00';   // ドロップダウンでは常に一番下に表示する
+var NOTE_CODES = [ZATSUYOU_CODE, SEKKEI_CODE]; // 作業内容を手入力できる製番の一覧
+function codeAllowsNote(code){ return NOTE_CODES.indexOf(code) !== -1; }
 var SEED_BENTO_SETTINGS = {phone:'087-841-6000', unitPrice:280, subsidyPerUnit:140, notifyEmails:['anzai-keikin@mc.pikara.ne.jp','fullmonkey.anz@gmail.com'], cutoffHour:8, cutoffMinute:15};
 
 /* ================= state ================= */
@@ -842,7 +812,7 @@ function renderGate(){
   if (!state.accessDoc){
     return (
       '<div class="app-shell">' +
-        '<div class="view" style="padding-top:8px"><div class="panel gate-wrap">' +
+        '<div class="view" style="padding-top:16px"><div class="panel gate-wrap">' +
           '<div class="icon">🔑</div>' +
           '<h2>アクセスコードの初期設定</h2>' +
           '<p class="caption">このアプリを使う全員で共有する合い言葉を設定してください。次回以降、この端末では入力不要になります。</p>' +
@@ -855,7 +825,7 @@ function renderGate(){
   }
   return (
     '<div class="app-shell">' +
-      '<div class="view" style="padding-top:8px"><div class="panel gate-wrap">' +
+      '<div class="view" style="padding-top:16px"><div class="panel gate-wrap">' +
         '<div class="icon">🔑</div>' +
         '<h2>日報</h2>' +
         '<p class="caption">合い言葉を入力してください。</p>' +
@@ -891,21 +861,6 @@ function bindGate(){
       } else {
         toast('合い言葉が違います', true);
       }
-    });
-  });
-  bindBentoLinks();
-}
-
-// 「🍱 弁当注文はこちら」ボタン。通常のaタグのhref遷移に加えて、
-// 携帯のブラウザ(特に一部のアプリ内ブラウザ等)でタップしても遷移しない
-// 事例があったため、クリックイベントでも明示的に同じタブ内で遷移させる。
-function bindBentoLinks(){
-  document.querySelectorAll('.bento-link-big').forEach(function(el){
-    if (el._bentoLinkBound) return;
-    el._bentoLinkBound = true;
-    el.addEventListener('click', function(e){
-      e.preventDefault();
-      window.location.href = el.getAttribute('href');
     });
   });
 }
@@ -947,7 +902,6 @@ function bindTopbar(){
     if (state.monthDocUnsub){ state.monthDocUnsub(); state.monthDocUnsub=null; }
     render();
   });
-  bindBentoLinks();
 }
 
 function escapeHtml(s){
@@ -1057,12 +1011,16 @@ function renderDayForm(dateStr){
   }
 
   var warnKeys = state.dayWarnKeys || [];
+  var holiday = isHoliday(dateStr);
   var fieldsHtml = FIELD_DEFS.map(function(f){
     var warn = warnKeys.indexOf(f.key) !== -1;
+    // 休日は「休出」に作業時間の合計を自動表示する(手入力不可)
+    var autoHW = holiday && f.key === 'holidayWork';
+    var val = autoHW ? (total || '') : (num(day[f.key])||'');
     return (
       '<div class="field'+(warn?' field-warn':'')+'" data-field-wrap="'+f.key+'">' +
-        '<label>'+f.label+'</label>' +
-        '<input type="number" class="num-input" step="0.5" min="0" inputmode="decimal" data-field="'+f.key+'" value="'+(num(day[f.key])||'')+'">' +
+        '<label>'+f.label+(autoHW?'（自動）':'')+'</label>' +
+        '<input type="number" class="num-input" step="0.5" min="0" inputmode="decimal" data-field="'+f.key+'" value="'+val+'"'+(autoHW?' readonly tabindex="-1"':'')+'>' +
       '</div>'
     );
   }).join('');
@@ -1072,7 +1030,7 @@ function renderDayForm(dateStr){
       var label = w.code+' '+w.name+(w.contractor?'（'+w.contractor+'）':'');
       return '<option value="'+w.code+'" '+(it.code===w.code?'selected':'')+'>'+escapeHtml(label)+'</option>';
     }).join('');
-    var showNote = it.code === ZATSUYOU_CODE;
+    var showNote = codeAllowsNote(it.code);
     return (
       '<div class="stack" style="gap:6px">' +
         '<div class="item-row">' +
@@ -1082,7 +1040,7 @@ function renderDayForm(dateStr){
         '</div>' +
         '<div class="field" data-item-note-wrap="'+idx+'"'+(showNote?'':' hidden')+'>' +
           '<label>作業内容（手入力・任意）</label>' +
-          '<input type="text" data-item-note="'+idx+'" placeholder="例）〇〇清掃" value="'+escapeHtml(it.note||'')+'">' +
+          '<input type="text" data-item-note="'+idx+'" placeholder="'+(it.code===ZATSUYOU_CODE?'例）〇〇清掃':'')+'" value="'+escapeHtml(it.note||'')+'">' +
         '</div>' +
       '</div>'
     );
@@ -1127,11 +1085,13 @@ function readDayForm(){
     var note = noteEl ? noteEl.value.trim() : '';
     if (code){
       var itemObj = {code:code, hours:hours};
-      if (code === ZATSUYOU_CODE && note) itemObj.note = note;
+      if (codeAllowsNote(code) && note) itemObj.note = note;
       items.push(itemObj);
     }
   }
   day.items = items;
+  // 休日の出勤は作業時間の合計をそのまま休出とする
+  if (state.selDate && isHoliday(state.selDate)) day.holidayWork = computeTotal(state.selDate, day);
   return day;
 }
 function liveRecalc(){
@@ -1140,6 +1100,10 @@ function liveRecalc(){
   var total = computeTotal(state.selDate, day);
   var badge = document.getElementById('dayTotalBadge');
   if (badge) badge.textContent = displayTotal(state.selDate, day, total) + ' h';
+  if (isHoliday(state.selDate)){
+    var hwEl = document.querySelector('[data-field="holidayWork"]');
+    if (hwEl) hwEl.value = total || '';
+  }
 }
 
 /* ================= SUMMARY VIEW ================= */
@@ -1278,8 +1242,8 @@ function computeDayItemBreakdown(cache, d){
     (dayData.items||[]).forEach(function(it){
       if (!it.code) return;
       var key, label;
-      if (it.code === ZATSUYOU_CODE && it.note){
-        key = ZATSUYOU_CODE + '::' + it.note;
+      if (codeAllowsNote(it.code) && it.note){
+        key = it.code + '::' + it.note;
         label = workItemLabel(it.code) + '（'+it.note+'）';
       } else {
         key = it.code;
@@ -2831,34 +2795,6 @@ function saveBentoQty(dateStr, workerId, qty, silent){
     if (dateStr === todayStr()) subscribeBentoToday();
   });
 }
-function computeTodayBentoInfo(){
-  var dateStr = todayStr();
-  if (isHoliday(dateStr)) return {show:false};
-  var dayMap = getBentoDay(state.bentoTodayDoc, TODAY.d);
-  var total = bentoDayTotal(dayMap);
-  if (total <= 0) return {show:false};
-  var now = new Date();
-  var nowMin = now.getHours()*60 + now.getMinutes();
-  var cutoffMin = num(state.bentoSettings.cutoffHour)*60 + num(state.bentoSettings.cutoffMinute);
-  return {show:true, total:total, closed: nowMin >= cutoffMin};
-}
-function renderBentoBanner(){
-  var info = computeTodayBentoInfo();
-  if (!info.show) return '';
-  var phone = state.bentoSettings.phone || '';
-  var telHref = 'tel:' + phone.replace(/[^0-9+]/g, '');
-  if (info.closed){
-    return (
-      '<div class="panel bento-banner closed"><p class="caption">🍱 本日の弁当 合計' + info.total + '個・注文受付は締め切りました</p></div>'
-    );
-  }
-  return (
-    '<div class="panel bento-banner">' +
-      '<p class="caption">🍱 本日の弁当 合計' + info.total + '個・' + num(state.bentoSettings.cutoffHour) + ':' + pad2(num(state.bentoSettings.cutoffMinute)) + 'までに注文してください</p>' +
-      '<a class="btn btn-primary btn-sm" style="margin-top:8px" href="' + telHref + '">電話する（' + escapeHtml(phone) + '）</a>' +
-    '</div>'
-  );
-}
 function renderBentoDaySummary(workers){
   if (!state.bentoSelDate) return '';
   var dateStr = state.bentoSelDate;
@@ -3256,7 +3192,9 @@ function bindInputView(){
       }
       if (!el.value && hoursEl){ hoursEl.value = ''; }
       var noteWrap = document.querySelector('[data-item-note-wrap="'+idx+'"]');
-      if (noteWrap) noteWrap.hidden = (el.value !== ZATSUYOU_CODE);
+      if (noteWrap) noteWrap.hidden = !codeAllowsNote(el.value);
+      var noteInputEl = document.querySelector('[data-item-note="'+idx+'"]');
+      if (noteInputEl) noteInputEl.placeholder = (el.value === ZATSUYOU_CODE) ? '例）〇〇清掃' : '';
       liveRecalc();
     });
   });
@@ -3280,7 +3218,9 @@ function bindInputView(){
     var day = readDayForm();
     var total = computeTotal(state.selDate, day);
     var warnKeys = [], warnMsg = '';
-    if (total > 8){
+    if (isHoliday(state.selDate)){
+      // 休日出勤は休出＝作業時間の合計とし、8時間チェックは行わない
+    } else if (total > 8){
       // 超過分＝早出残業。有休・欠勤・遅刻・早退・休出は入力なしが正しい
       var excess = round2(total - 8);
       if (round2(day.overtime) !== excess) warnKeys.push('overtime');
