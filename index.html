@@ -178,7 +178,6 @@ a{color:var(--accent)}
 .field-row>.field{min-width:0}
 .field-row>.field input,.field-row>.field select{min-width:0}
 .num-input{font-family:var(--font-mono);text-align:right}
-.num-input[readonly]{background:var(--surface-2)}
 @media (max-width:380px){
   .field-row{grid-template-columns:1fr}
   .field input[type="date"]{max-width:none}
@@ -393,7 +392,7 @@ var SEKKEI_CODE = '000';   // 「設計」選択時は作業内容を手入力�
 var MAEYAMA_CODE = '00';   // ドロップダウンでは常に一番下に表示する
 var NOTE_CODES = [ZATSUYOU_CODE, SEKKEI_CODE]; // 作業内容を手入力できる製番の一覧
 function codeAllowsNote(code){ return NOTE_CODES.indexOf(code) !== -1; }
-var SEED_BENTO_SETTINGS = {phone:'087-841-6000', unitPrice:280, subsidyPerUnit:140, notifyEmails:['anzai-keikin@mc.pikara.ne.jp','fullmonkey.anz@gmail.com'], cutoffHour:8, cutoffMinute:15};
+var SEED_BENTO_SETTINGS = {phone:'087-841-6000', unitPrice:280, subsidyPerUnit:140, notifyEmails:['anzai-keikin@mc.pikara.ne.jp','fullmonkey.anz@gmail.com','shidashi-tsukasa@sirius.ocn.ne.jp'], cutoffHour:8, cutoffMinute:15};
 
 /* ================= state ================= */
 var state = {
@@ -493,7 +492,23 @@ function workItemLabel(code){
   return it ? (it.code+' '+it.name) : code;
 }
 function activeWorkers(){ return state.workers.filter(function(w){return w.active!==false;}).sort(function(a,b){return (a.order||0)-(b.order||0);}); }
-function activeWorkItems(){ return state.workItems.filter(function(w){return w.active!==false;}).sort(function(a,b){return (a.order||0)-(b.order||0);}); }
+/* 製番の表示順: 「1」(工務一般)を一番上、「00」(前山)を一番下、それ以外は製番の昇順 */
+function seibanRank(code){
+  var c = String(code==null?'':code).trim();
+  if (c === '1') return 0;
+  if (c === MAEYAMA_CODE) return 3;
+  return /^\d+$/.test(c) ? 1 : 2;
+}
+function compareSeiban(a, b){
+  var ra = seibanRank(a), rb = seibanRank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 1){
+    var d = parseInt(a,10) - parseInt(b,10);
+    if (d) return d;
+  }
+  return String(a).localeCompare(String(b), 'ja');
+}
+function activeWorkItems(){ return state.workItems.filter(function(w){return w.active!==false;}).sort(function(a,b){return compareSeiban(a.code, b.code) || ((a.order||0)-(b.order||0));}); }
 
 function isHoliday(dateStr){
   var ex = state.holidayExceptions[dateStr];
@@ -987,6 +1002,7 @@ function renderInputView(){
           '<div><div class="caption">勤務時間</div><div class="mono" style="font-size:18px;font-weight:700;color:var(--accent-strong)">'+fmtHour(monthSum.workHours)+' h</div></div>' +
           '<div><div class="caption">有休</div><div class="mono" style="font-size:18px;font-weight:700">'+fmtHour(monthSum.sums.paidLeave)+' h</div></div>' +
           '<div><div class="caption">早出残業</div><div class="mono" style="font-size:18px;font-weight:700">'+fmtHour(monthSum.sums.overtime)+' h</div></div>' +
+          '<div><div class="caption">休出</div><div class="mono" style="font-size:18px;font-weight:700">'+fmtHour(monthSum.sums.holidayWork)+' h</div></div>' +
         '</div>' +
       '</div>' +
     '</div>'
@@ -1011,16 +1027,15 @@ function renderDayForm(dateStr){
   }
 
   var warnKeys = state.dayWarnKeys || [];
-  var holiday = isHoliday(dateStr);
+  var holidayWorking = isHoliday(dateStr) && total > 0; // 休日の出勤: 作業時間＝休出(自動)・8時間チェックなし
   var fieldsHtml = FIELD_DEFS.map(function(f){
     var warn = warnKeys.indexOf(f.key) !== -1;
-    // 休日は「休出」に作業時間の合計を自動表示する(手入力不可)
-    var autoHW = holiday && f.key === 'holidayWork';
-    var val = autoHW ? (total || '') : (num(day[f.key])||'');
+    var isAutoHW = holidayWorking && f.key === 'holidayWork';
+    var val = isAutoHW ? total : num(day[f.key]);
     return (
       '<div class="field'+(warn?' field-warn':'')+'" data-field-wrap="'+f.key+'">' +
-        '<label>'+f.label+(autoHW?'（自動）':'')+'</label>' +
-        '<input type="number" class="num-input" step="0.5" min="0" inputmode="decimal" data-field="'+f.key+'" value="'+val+'"'+(autoHW?' readonly tabindex="-1"':'')+'>' +
+        '<label>'+f.label+'</label>' +
+        '<input type="number" class="num-input" step="0.5" min="0" inputmode="decimal" data-field="'+f.key+'" value="'+(val||'')+'"'+(isAutoHW?' readonly':'')+'>' +
       '</div>'
     );
   }).join('');
@@ -1090,20 +1105,26 @@ function readDayForm(){
     }
   }
   day.items = items;
-  // 休日の出勤は作業時間の合計をそのまま休出とする
-  if (state.selDate && isHoliday(state.selDate)) day.holidayWork = computeTotal(state.selDate, day);
+  // 休日の出勤: 作業時間と同じ時間を休出に自動設定する
+  if (state.selDate && isHoliday(state.selDate)){
+    var hwTotal = computeTotal(state.selDate, day);
+    if (hwTotal > 0) day.holidayWork = hwTotal;
+  }
   return day;
 }
 function liveRecalc(){
   if (!state.selDate) return;
   var day = readDayForm();
   var total = computeTotal(state.selDate, day);
-  var badge = document.getElementById('dayTotalBadge');
-  if (badge) badge.textContent = displayTotal(state.selDate, day, total) + ' h';
   if (isHoliday(state.selDate)){
     var hwEl = document.querySelector('[data-field="holidayWork"]');
-    if (hwEl) hwEl.value = total || '';
+    if (hwEl){
+      if (total > 0){ hwEl.value = total; hwEl.readOnly = true; }
+      else { if (hwEl.readOnly) hwEl.value = ''; hwEl.readOnly = false; }
+    }
   }
+  var badge = document.getElementById('dayTotalBadge');
+  if (badge) badge.textContent = displayTotal(state.selDate, day, total) + ' h';
 }
 
 /* ================= SUMMARY VIEW ================= */
@@ -1249,11 +1270,11 @@ function computeDayItemBreakdown(cache, d){
         key = it.code;
         label = workItemLabel(it.code);
       }
-      if (!groups[key]){ groups[key] = {label:label, hours:0}; order.push(key); }
+      if (!groups[key]){ groups[key] = {code:it.code, note:(codeAllowsNote(it.code) && it.note) ? it.note : '', label:label, hours:0}; order.push(key); }
       groups[key].hours += num(it.hours);
     });
   });
-  return order.map(function(k){ return groups[k]; }).sort(function(a,b){ return b.hours - a.hours; });
+  return order.map(function(k){ return groups[k]; }).sort(function(a,b){ return compareSeiban(a.code, b.code) || String(a.note).localeCompare(String(b.note), 'ja'); });
 }
 function renderSummaryDailyItems(cache, y, m){
   var dim = daysInMonth(y,m);
@@ -1344,7 +1365,7 @@ function doExport(kind){
       }
     });
     rows = [['製番','名称','合計時間(h)']];
-    Object.keys(totals).sort().forEach(function(code){
+    Object.keys(totals).sort(compareSeiban).forEach(function(code){
       rows.push([code, workItemLabel(code).replace(code+' ',''), fmtHour(totals[code])]);
     });
     filename = '製番別集計_'+y+pad2(m)+'.csv';
@@ -3218,8 +3239,8 @@ function bindInputView(){
     var day = readDayForm();
     var total = computeTotal(state.selDate, day);
     var warnKeys = [], warnMsg = '';
-    if (isHoliday(state.selDate)){
-      // 休日出勤は休出＝作業時間の合計とし、8時間チェックは行わない
+    if (isHoliday(state.selDate) && total > 0){
+      // 休日の出勤: 8時間チェックは行わない(休出＝作業時間を自動設定済み)
     } else if (total > 8){
       // 超過分＝早出残業。有休・欠勤・遅刻・早退・休出は入力なしが正しい
       var excess = round2(total - 8);
